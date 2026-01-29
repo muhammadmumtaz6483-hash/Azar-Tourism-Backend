@@ -18,8 +18,9 @@ python-dotenv
 
 # Auth / Security (ADDED)
 python-jose[cryptography]   # ✅ JWT
-passlib[bcrypt]
-bcrypt==4.0.1             # ✅ pinned to avoid 72-byte password limit error
+passlib[bcrypt]>=1.7.4
+bcrypt==4.0.1
+          
 
 # PDF / Image
 reportlab
