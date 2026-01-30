@@ -20,7 +20,7 @@ python-dotenv
 python-jose[cryptography]   # ✅ JWT
 passlib[bcrypt]>=1.7.4
 bcrypt==4.0.1
-          
+argon2-cffi    
 
 # PDF / Image
 reportlab
