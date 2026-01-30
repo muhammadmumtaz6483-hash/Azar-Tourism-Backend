@@ -24,7 +24,7 @@ from jose import jwt, JWTError
 UPLOAD_DIR = "uploads/profile"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
 # ✅ SIGNUP
