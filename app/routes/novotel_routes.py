@@ -1127,7 +1127,7 @@ async def generate_pdf_direct(data: dict):
                   doc.drawString(margin_l + 30 * mm, y, line.get('description', ''))
                   doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{float(line.get('debit', 0)):.3f}")
                   doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{float(line.get('credit', 0)):.3f}")
-                 y -= row_height
+                  y -= row_height
             
             # 6. Footer (only on last page)
             if page_data.get('isLastPage', False):
