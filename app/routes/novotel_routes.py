@@ -862,7 +862,7 @@ async def delete_invoice_endpoint(invoice_id: int, db: AsyncSession = Depends(ge
 async def generate_pdf_direct(data: dict):
     """
     Generate PDF with exact jsPDF positioning using ReportLab
-    Fixed 30 rows per page with proper footer spacing
+    Compact footer like in the image with stamp at bottom
     """
 
     invoice_no = str(data.get('invoiceNo', 'invoice'))
@@ -1163,13 +1163,10 @@ async def generate_pdf_direct(data: dict):
                     
                     doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{debit_val:.3f}")
                     doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{credit_val:.3f}")
-                else:
-                    # Empty row for spacing
-                    pass
                 
                 y -= row_height
             
-            # 5. Footer (only on last page)
+            # 5. Footer (only on last page) - COMPACT LIKE IN IMAGE
             if page_data.get('isLastPage', False):
                 # Calculate totals
                 total_debit = sum(float(l.get('debit', 0)) for l in all_lines)
@@ -1178,7 +1175,7 @@ async def generate_pdf_direct(data: dict):
                 total_usd = total_debit / exchange_rate
                 currency = invoice.get('currency', 'TND')
                 
-                # Calculate tax values (as per your image)
+                # Calculate tax values based on total
                 net_taxable = float(invoice.get('netTaxable', total_debit * 100/109.19))
                 fdcst = float(invoice.get('fdsct', net_taxable * 0.01))
                 vat7 = float(invoice.get('vat7Total', net_taxable * 0.07))
@@ -1189,78 +1186,105 @@ async def generate_pdf_direct(data: dict):
                 paid_out = 0.0
                 total_gross = float(invoice.get('grossTotal', total_debit))
                 
-                # Adjust y position to have less space before footer
-                # Start footer closer to last row
-                if y > 60 * mm:
-                    y = 60 * mm  # Reduced space
+                # Start footer immediately after last row
+                # Make sure we have enough space for stamp at bottom
+                min_y_for_stamp = 30 * mm  # Stamp needs about 30mm space
+                
+                # If y is too low, adjust it
+                if y < min_y_for_stamp:
+                    y = min_y_for_stamp + 10 * mm
                 
                 # Total line
                 doc.line(margin_l, y, page_width - margin_r, y)
                 y -= 4.2 * mm
                 
-                # Total row
+                # Total row (like in your image - right aligned)
                 doc.setFont(font_name, 9)
                 doc.drawString(margin_l + 80 * mm, y, "Total")
                 doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{total_debit:.3f}")
                 doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{total_credit:.3f}")
                 
                 y -= 2 * mm
-                # Balance line (shorter line as in your image)
+                # Balance line (shorter line)
                 doc.line(margin_l + 80 * mm, y, page_width - margin_r, y)
                 y -= 4.2 * mm
                 
                 # Balance row
                 doc.drawString(margin_l + 80 * mm, y, "Balance")
                 balance_text = f"{total_debit:.3f} {currency}"
-                balance_text_width = doc.stringWidth(balance_text, font_name, 9)
-                doc.drawString(page_width - margin_r - balance_text_width - 2 * mm, y, balance_text)
+                doc.drawRightString(page_width - margin_r - 2 * mm, y, balance_text)
                 
-                # Tax section - RIGHT SIDE (compact as per your image)
-                tax_start_y = y - 8 * mm  # Close to balance
-                tax_x = margin_l + 80 * mm  # Aligned with "Balance"
-                tax_val_x = page_width - margin_r
+                # Tax section - COMPACT, TWO COLUMNS (as in your image)
+                # Left side: Tax labels and values
+                tax_start_y = y - 6 * mm  # Close to balance
+                tax_label_x = margin_l
+                tax_value_x = margin_l + 60 * mm
                 tax_row_height = 4 * mm  # Compact spacing
                 
                 ty = tax_start_y
                 
-                # Tax items list
-                tax_items = [
+                # Tax items for left column (from your image)
+                left_tax_items = [
                     ("Net Taxable", f"{net_taxable:.3f} {currency}"),
                     ("FDCTST 1 %", f"{fdcst:.3f} {currency}"),
                     ("VAT 7%", f"{vat7:.3f} {currency}"),
                     ("VAT 19%", f"{vat19:.3f} {currency}"),
                     ("City Tax", f"{city_tax:.3f} {currency}"),
                     ("Stamp Tax", f"{stamp_tax:.3f} {currency}"),
-                    ("Non Revenue", f"{non_revenue:.3f} {currency}"),
+                    ("Non Revenue", f"{non_revenue:.3f} {currency}")
+                ]
+                
+                # Draw left tax column
+                for label, value in left_tax_items:
+                    doc.drawString(tax_label_x, ty, label)
+                    doc.drawString(tax_value_x, ty, value)
+                    ty -= tax_row_height
+                
+                # Right side: USD and other items (aligned with last items)
+                right_start_y = tax_start_y
+                right_label_x = page_width / 2 + 10 * mm
+                right_value_x = page_width - margin_r - 40 * mm
+                
+                # Items for right column (from your image)
+                right_items = [
+                    ("USD Exch. Rate:", f"{exchange_rate:.2f} {currency}"),
                     ("Paid Out", f"{paid_out:.3f} {currency}"),
+                    ("Total in USD:", f"{total_usd:.2f} USD"),
                     ("Total Gross", f"{total_gross:.3f} {currency}")
                 ]
                 
-                # Draw tax table (compact, no extra spacing)
-                for label, value in tax_items:
-                    doc.drawString(tax_x, ty, label)
-                    doc.drawRightString(tax_val_x, ty, value)
-                    ty -= tax_row_height
+                ry = right_start_y
                 
-                # USD Exchange Rate section - LEFT SIDE (compact)
-                # Position aligned with last rows of tax table
-                usd_start_y = tax_start_y - (len(tax_items) - 2) * tax_row_height
-                
-                doc.setFont(font_name, 9)
-                
-                # USD Exch. Rate (aligned with "Paid Out")
-                doc.drawString(margin_l, usd_start_y, "USD Exch. Rate:")
-                doc.drawString(margin_l + 32 * mm, usd_start_y, f"{exchange_rate:.2f} {currency}")
-                
-                # Total in USD (aligned with "Total Gross")
-                usd_start_y -= tax_row_height
-                doc.drawString(margin_l, usd_start_y, "Total in USD:")
-                doc.drawString(margin_l + 32 * mm, usd_start_y, f"{total_usd:.2f} USD")
+                for i, (label, value) in enumerate(right_items):
+                    # Align with corresponding left items
+                    if i == 0:  # USD Exch Rate
+                        ry = tax_start_y - 3 * tax_row_height
+                    elif i == 1:  # Paid Out
+                        ry = tax_start_y - 6 * tax_row_height
+                    elif i == 2:  # Total in USD
+                        ry = tax_start_y - 7 * tax_row_height
+                    elif i == 3:  # Total Gross
+                        ry = tax_start_y - 8 * tax_row_height
+                    
+                    doc.drawString(right_label_x, ry, label)
+                    doc.drawString(right_value_x, ry, value)
             
-            # 6. Stamp (on EVERY page - bottom right corner)
+            # 6. Stamp (on EVERY page - bottom right corner, BELOW everything)
+            # Stamp should be at very bottom, below all text
             if stamp_img:
                 stamp_x = page_width - stamp_w - 5 * mm
-                stamp_y = 10 * mm
+                stamp_y = 10 * mm  # 10mm from bottom
+                
+                # Check if stamp would overlap with text on last page
+                if page_data.get('isLastPage', False):
+                    # Calculate lowest text position
+                    lowest_text = min(y, ty if 'ty' in locals() else y, ry if 'ry' in locals() else y)
+                    
+                    # If stamp would overlap, move stamp lower or text higher
+                    if lowest_text < stamp_y + stamp_h + 5 * mm:
+                        # Move stamp a bit lower
+                        stamp_y = 5 * mm
+                
                 doc.drawImage(stamp_img, stamp_x, stamp_y, width=stamp_w, height=stamp_h, preserveAspectRatio=False, mask='auto')
         
         # Save PDF
