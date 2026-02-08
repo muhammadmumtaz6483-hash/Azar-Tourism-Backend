@@ -1166,128 +1166,78 @@ async def generate_pdf_direct(data: dict):
                 
                 y -= row_height
             
-            # 5. Footer (only on last page) - FIXED ALIGNMENT
+            # 6. Footer (only on last page)
             if page_data.get('isLastPage', False):
-                # Calculate totals
+                all_lines = invoice.get('lines', [])
                 total_debit = sum(float(l.get('debit', 0)) for l in all_lines)
                 total_credit = sum(float(l.get('credit', 0)) for l in all_lines)
                 exchange_rate = float(invoice.get('exchangeRate', 2.85))
-                total_usd = total_debit / exchange_rate
+                total_usd = f"{(total_debit / exchange_rate):.2f}"
                 currency = invoice.get('currency', 'TND')
                 
-                # Calculate tax values
-                net_taxable = float(invoice.get('netTaxable', total_debit * 100/109.19))
-                fdcst = float(invoice.get('fdsct', net_taxable * 0.01))
-                vat7 = float(invoice.get('vat7Total', net_taxable * 0.07))
-                vat19 = 0.0
-                city_tax = float(invoice.get('cityTaxTotal', 0))
-                stamp_tax = float(invoice.get('stampTaxTotal', 1.0))  # Default 1.0
-                non_revenue = 0.0
-                paid_out = 0.0
-                total_gross = float(invoice.get('grossTotal', total_debit))
-                
-                # Start footer immediately after last row
-                # Ensure minimum space for stamp
-                min_y_for_content = 50 * mm
-                if y < min_y_for_content:
-                    y = min_y_for_content
-                
-                # Total line (full width)
+                y -= 2 * mm
+                # Full-width line for Total
                 doc.line(margin_l, y, page_width - margin_r, y)
                 y -= 4.2 * mm
                 
-                # Total row - EXACTLY like in your images
+                # Total row
                 doc.setFont(font_name, 9)
                 doc.drawString(margin_l + 80 * mm, y, "Total")
                 doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{total_debit:.3f}")
                 doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{total_credit:.3f}")
                 
                 y -= 2 * mm
-                # Balance line (shorter line starting from "Balance")
-                balance_line_start = margin_l + 80 * mm
-                doc.line(balance_line_start, y, page_width - margin_r, y)
+                # Half-width line for Balance
+                doc.line(margin_l + 80 * mm, y, page_width - margin_r, y)
                 y -= 4.2 * mm
                 
-                # Balance row - EXACTLY like in your images
-                doc.drawString(balance_line_start, y, "Balance")
-                balance_value = f"{total_debit:.3f} {currency}"
-                # Position balance value at right edge (like in your images)
-                balance_value_x = page_width - margin_r - doc.stringWidth(balance_value, font_name, 9)
-                doc.drawString(balance_value_x, y, balance_value)
+                # Balance row
+                doc.drawString(margin_l + 80 * mm, y, "Balance")
+                doc.drawString(page_width - margin_r - 80 * mm, y, f"{total_debit:.3f} {currency}")
                 
-                # Tax section - PROPER TWO COLUMN LAYOUT
-                # Start tax section close to balance
-                tax_start_y = y - 8 * mm
-                
-                # LEFT COLUMN: Tax items (aligned with your second image)
-                left_column_x = margin_l
-                left_value_x = left_column_x + 40 * mm  # Fixed position for values
-                tax_row_height = 4 * mm
-                
-                ty = tax_start_y
-                
-                # Left column tax items
-                left_tax_items = [
-                    ("Net Taxable", f"{net_taxable:.3f} {currency}"),
-                    ("FDCTST 1 %", f"{fdcst:.3f} {currency}"),
-                    ("VAT 7%", f"{vat7:.3f} {currency}"),
-                    ("VAT 19%", f"{vat19:.3f} {currency}"),
-                    ("City Tax", f"{city_tax:.3f} {currency}"),
-                    ("Stamp Tax", f"{stamp_tax:.3f} {currency}"),
-                    ("Non Revenue", f"{non_revenue:.3f} {currency}")
+                # Calculate tax section to align at bottom
+                doc.setFont(font_name, 9)  # Tax section font size 9
+                taxes = [
+                    ("Net Taxable", invoice.get('netTaxable', 0)),
+                    ("FDCST 1 %", invoice.get('fdsct', 0)),
+                    ("VAT 7%", invoice.get('vat7Total', 0)),
+                    ("VAT 19%", 0),
+                    ("City Tax", invoice.get('cityTaxTotal', 0)),
+                    ("Stamp Tax", invoice.get('stampTaxTotal', 0)),
+                    ("Non Revenue", 0),
+                    ("Paid Out", 0),
+                    ("Total Gross", invoice.get('grossTotal', 0))
                 ]
                 
-                # Draw left column
-                for label, value in left_tax_items:
-                    doc.drawString(left_column_x, ty, label)
-                    doc.drawString(left_value_x, ty, value)
+                # Calculate starting Y position for tax table
+                tax_row_height = 4.5 * mm  # Increased from 3.8mm for better spacing
+                
+                # RIGHT SIDE: Tax table - start from calculated position
+                tax_x = page_width / 2 + 10 * mm
+                tax_val_x = page_width - margin_r
+                ty = y - 6 * mm  # Start below Balance
+                
+                for label, value in taxes:
+                    doc.drawString(tax_x, ty, label)
+                    doc.drawRightString(tax_val_x, ty, f"{float(value):.3f} {currency}")
                     ty -= tax_row_height
                 
-                # RIGHT COLUMN: USD and other items (aligned with your first image)
-                right_column_x = page_width / 2 + 10 * mm
-                right_value_x = right_column_x + 35 * mm
+                # LEFT SIDE: USD Exchange Rate - aligned with LAST 2 tax rows (Total Gross position)
+                final_gross_y = ty + tax_row_height  # Position of "Total Gross"
                 
-                # Calculate starting position for right column
-                # Align with specific rows in left column
-                right_start_y = tax_start_y
+                doc.setFont(font_name, 9)  # Changed from 7.5 to 9
+                usd_y = final_gross_y + tax_row_height  # Align first line with "Paid Out"
                 
-                # Right column items
-                right_items = [
-                    ("USD Exch. Rate:", f"{exchange_rate:.2f} {currency}", tax_start_y - 3 * tax_row_height),
-                    ("", "", 0),  # Empty spacer
-                    ("Paid Out", f"{paid_out:.3f} {currency}", tax_start_y - 6 * tax_row_height),
-                    ("Total in USD:", f"{total_usd:.2f} USD", tax_start_y - 7 * tax_row_height),
-                    ("Total Gross", f"{total_gross:.3f} {currency}", tax_start_y - 8 * tax_row_height)
-                ]
-                
-                # Draw right column with exact positioning
-                for label, value, pos_y in right_items:
-                    if label:  # Skip empty spacers
-                        doc.drawString(right_column_x, pos_y, label)
-                        if value:
-                            doc.drawString(right_value_x, pos_y, value)
+                doc.drawString(margin_l, usd_y, "USD Exch. Rate:")
+                doc.drawString(margin_l + 28 * mm, usd_y, f"{exchange_rate:.2f} {currency}")
+                usd_y -= tax_row_height
+                doc.drawString(margin_l, usd_y, "Total in USD:")
+                doc.drawString(margin_l + 28 * mm, usd_y, f"{total_usd} USD")
             
-            # 6. Stamp (on EVERY page - bottom right corner)
-            # Stamp should always be at bottom, never overlap with content
+            # 7. Stamp (on EVERY page - bottom right corner)
             if stamp_img:
-                stamp_x = page_width - stamp_w - 5 * mm
-                stamp_y = 10 * mm
-                
-                # On last page, check if content is too low
-                if page_data.get('isLastPage', False):
-                    # Find the lowest content position
-                    lowest_content = y
-                    if 'ty' in locals():
-                        lowest_content = min(lowest_content, ty)
-                    if 'right_start_y' in locals():
-                        lowest_content = min(lowest_content, right_start_y - 8 * tax_row_height)
-                    
-                    # If content would overlap with stamp, adjust
-                    if lowest_content < stamp_y + stamp_h + 5 * mm:
-                        # We can either move stamp lower or content higher
-                        # For now, just ensure stamp is at very bottom
-                        stamp_y = 5 * mm
-                
+                stamp_x = page_width - stamp_w - 5 * mm  # 5mm from right edge
+                stamp_y = 10 * mm  # 10mm from bottom
                 doc.drawImage(stamp_img, stamp_x, stamp_y, width=stamp_w, height=stamp_h, preserveAspectRatio=False, mask='auto')
         
         # Save PDF
@@ -1302,7 +1252,6 @@ async def generate_pdf_direct(data: dict):
         pdf_filename = f"NOVOTEL_{safe_filename}.pdf"
         
         logger.info(f"✅ PDF generated: {len(pdf_bytes)} bytes - Filename: {pdf_filename}")
-        logger.info(f"📊 Pages: {len(paginated_data)}, Rows per page: 30")
         
         return Response(
             content=pdf_bytes,
