@@ -862,7 +862,7 @@ async def delete_invoice_endpoint(invoice_id: int, db: AsyncSession = Depends(ge
 async def generate_pdf_direct(data: dict):
     """
     Generate PDF with exact jsPDF positioning using ReportLab
-    Compact footer like in the image with stamp at bottom
+    Fixed alignment for footer items
     """
 
     invoice_no = str(data.get('invoiceNo', 'invoice'))
@@ -1166,7 +1166,7 @@ async def generate_pdf_direct(data: dict):
                 
                 y -= row_height
             
-            # 5. Footer (only on last page) - COMPACT LIKE IN IMAGE
+            # 5. Footer (only on last page) - FIXED ALIGNMENT
             if page_data.get('isLastPage', False):
                 # Calculate totals
                 total_debit = sum(float(l.get('debit', 0)) for l in all_lines)
@@ -1175,55 +1175,58 @@ async def generate_pdf_direct(data: dict):
                 total_usd = total_debit / exchange_rate
                 currency = invoice.get('currency', 'TND')
                 
-                # Calculate tax values based on total
+                # Calculate tax values
                 net_taxable = float(invoice.get('netTaxable', total_debit * 100/109.19))
                 fdcst = float(invoice.get('fdsct', net_taxable * 0.01))
                 vat7 = float(invoice.get('vat7Total', net_taxable * 0.07))
                 vat19 = 0.0
                 city_tax = float(invoice.get('cityTaxTotal', 0))
-                stamp_tax = float(invoice.get('stampTaxTotal', 0))
+                stamp_tax = float(invoice.get('stampTaxTotal', 1.0))  # Default 1.0
                 non_revenue = 0.0
                 paid_out = 0.0
                 total_gross = float(invoice.get('grossTotal', total_debit))
                 
                 # Start footer immediately after last row
-                # Make sure we have enough space for stamp at bottom
-                min_y_for_stamp = 30 * mm  # Stamp needs about 30mm space
+                # Ensure minimum space for stamp
+                min_y_for_content = 50 * mm
+                if y < min_y_for_content:
+                    y = min_y_for_content
                 
-                # If y is too low, adjust it
-                if y < min_y_for_stamp:
-                    y = min_y_for_stamp + 10 * mm
-                
-                # Total line
+                # Total line (full width)
                 doc.line(margin_l, y, page_width - margin_r, y)
                 y -= 4.2 * mm
                 
-                # Total row (like in your image - right aligned)
+                # Total row - EXACTLY like in your images
                 doc.setFont(font_name, 9)
                 doc.drawString(margin_l + 80 * mm, y, "Total")
                 doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{total_debit:.3f}")
                 doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{total_credit:.3f}")
                 
                 y -= 2 * mm
-                # Balance line (shorter line)
-                doc.line(margin_l + 80 * mm, y, page_width - margin_r, y)
+                # Balance line (shorter line starting from "Balance")
+                balance_line_start = margin_l + 80 * mm
+                doc.line(balance_line_start, y, page_width - margin_r, y)
                 y -= 4.2 * mm
                 
-                # Balance row
-                doc.drawString(margin_l + 80 * mm, y, "Balance")
-                balance_text = f"{total_debit:.3f} {currency}"
-                doc.drawRightString(page_width - margin_r - 2 * mm, y, balance_text)
+                # Balance row - EXACTLY like in your images
+                doc.drawString(balance_line_start, y, "Balance")
+                balance_value = f"{total_debit:.3f} {currency}"
+                # Position balance value at right edge (like in your images)
+                balance_value_x = page_width - margin_r - doc.stringWidth(balance_value, font_name, 9)
+                doc.drawString(balance_value_x, y, balance_value)
                 
-                # Tax section - COMPACT, TWO COLUMNS (as in your image)
-                # Left side: Tax labels and values
-                tax_start_y = y - 6 * mm  # Close to balance
-                tax_label_x = margin_l
-                tax_value_x = margin_l + 60 * mm
-                tax_row_height = 4 * mm  # Compact spacing
+                # Tax section - PROPER TWO COLUMN LAYOUT
+                # Start tax section close to balance
+                tax_start_y = y - 8 * mm
+                
+                # LEFT COLUMN: Tax items (aligned with your second image)
+                left_column_x = margin_l
+                left_value_x = left_column_x + 40 * mm  # Fixed position for values
+                tax_row_height = 4 * mm
                 
                 ty = tax_start_y
                 
-                # Tax items for left column (from your image)
+                # Left column tax items
                 left_tax_items = [
                     ("Net Taxable", f"{net_taxable:.3f} {currency}"),
                     ("FDCTST 1 %", f"{fdcst:.3f} {currency}"),
@@ -1234,55 +1237,55 @@ async def generate_pdf_direct(data: dict):
                     ("Non Revenue", f"{non_revenue:.3f} {currency}")
                 ]
                 
-                # Draw left tax column
+                # Draw left column
                 for label, value in left_tax_items:
-                    doc.drawString(tax_label_x, ty, label)
-                    doc.drawString(tax_value_x, ty, value)
+                    doc.drawString(left_column_x, ty, label)
+                    doc.drawString(left_value_x, ty, value)
                     ty -= tax_row_height
                 
-                # Right side: USD and other items (aligned with last items)
-                right_start_y = tax_start_y
-                right_label_x = page_width / 2 + 10 * mm
-                right_value_x = page_width - margin_r - 40 * mm
+                # RIGHT COLUMN: USD and other items (aligned with your first image)
+                right_column_x = page_width / 2 + 10 * mm
+                right_value_x = right_column_x + 35 * mm
                 
-                # Items for right column (from your image)
+                # Calculate starting position for right column
+                # Align with specific rows in left column
+                right_start_y = tax_start_y
+                
+                # Right column items
                 right_items = [
-                    ("USD Exch. Rate:", f"{exchange_rate:.2f} {currency}"),
-                    ("Paid Out", f"{paid_out:.3f} {currency}"),
-                    ("Total in USD:", f"{total_usd:.2f} USD"),
-                    ("Total Gross", f"{total_gross:.3f} {currency}")
+                    ("USD Exch. Rate:", f"{exchange_rate:.2f} {currency}", tax_start_y - 3 * tax_row_height),
+                    ("", "", 0),  # Empty spacer
+                    ("Paid Out", f"{paid_out:.3f} {currency}", tax_start_y - 6 * tax_row_height),
+                    ("Total in USD:", f"{total_usd:.2f} USD", tax_start_y - 7 * tax_row_height),
+                    ("Total Gross", f"{total_gross:.3f} {currency}", tax_start_y - 8 * tax_row_height)
                 ]
                 
-                ry = right_start_y
-                
-                for i, (label, value) in enumerate(right_items):
-                    # Align with corresponding left items
-                    if i == 0:  # USD Exch Rate
-                        ry = tax_start_y - 3 * tax_row_height
-                    elif i == 1:  # Paid Out
-                        ry = tax_start_y - 6 * tax_row_height
-                    elif i == 2:  # Total in USD
-                        ry = tax_start_y - 7 * tax_row_height
-                    elif i == 3:  # Total Gross
-                        ry = tax_start_y - 8 * tax_row_height
-                    
-                    doc.drawString(right_label_x, ry, label)
-                    doc.drawString(right_value_x, ry, value)
+                # Draw right column with exact positioning
+                for label, value, pos_y in right_items:
+                    if label:  # Skip empty spacers
+                        doc.drawString(right_column_x, pos_y, label)
+                        if value:
+                            doc.drawString(right_value_x, pos_y, value)
             
-            # 6. Stamp (on EVERY page - bottom right corner, BELOW everything)
-            # Stamp should be at very bottom, below all text
+            # 6. Stamp (on EVERY page - bottom right corner)
+            # Stamp should always be at bottom, never overlap with content
             if stamp_img:
                 stamp_x = page_width - stamp_w - 5 * mm
-                stamp_y = 10 * mm  # 10mm from bottom
+                stamp_y = 10 * mm
                 
-                # Check if stamp would overlap with text on last page
+                # On last page, check if content is too low
                 if page_data.get('isLastPage', False):
-                    # Calculate lowest text position
-                    lowest_text = min(y, ty if 'ty' in locals() else y, ry if 'ry' in locals() else y)
+                    # Find the lowest content position
+                    lowest_content = y
+                    if 'ty' in locals():
+                        lowest_content = min(lowest_content, ty)
+                    if 'right_start_y' in locals():
+                        lowest_content = min(lowest_content, right_start_y - 8 * tax_row_height)
                     
-                    # If stamp would overlap, move stamp lower or text higher
-                    if lowest_text < stamp_y + stamp_h + 5 * mm:
-                        # Move stamp a bit lower
+                    # If content would overlap with stamp, adjust
+                    if lowest_content < stamp_y + stamp_h + 5 * mm:
+                        # We can either move stamp lower or content higher
+                        # For now, just ensure stamp is at very bottom
                         stamp_y = 5 * mm
                 
                 doc.drawImage(stamp_img, stamp_x, stamp_y, width=stamp_w, height=stamp_h, preserveAspectRatio=False, mask='auto')
