@@ -1144,7 +1144,7 @@ async def generate_pdf_direct(data: dict):
             
             # 4. Table Rows (30 rows per page)
             doc.setFont(font_name, 9)
-            row_height = 4.2 * mm  # Reduced from 5mm to fit 30 rows
+            row_height = 6 * mm  # Reduced from 5mm to fit 30 rows
             
             # Get lines for this page (max 30)
             page_lines = page_data.get('lines', [])
