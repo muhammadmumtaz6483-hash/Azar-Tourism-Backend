@@ -857,188 +857,419 @@ async def delete_invoice_endpoint(invoice_id: int, db: AsyncSession = Depends(ge
 
 
 # ==================== ENDPOINT 8: PDF Generate ====================
+# ==================== ENDPOINT 8: PDF Generate ====================
 @n_router.post("/generate-pdf-direct")
 async def generate_pdf_direct(data: dict):
+    """
+    Generate PDF with exact jsPDF positioning using ReportLab
+    Now with 30 rows per page
+    """
+
     invoice_no = str(data.get('invoiceNo', 'invoice'))
     safe_invoice_no = ''.join(c for c in invoice_no if c.isalnum() or c in ('_', '-'))
-
+    
     def optimize_image(image_path_or_url, max_width=800, max_height=600, quality=85):
+        """Compress and resize image for PDF"""
         try:
-            if image_path_or_url.startswith("http"):
-                r = requests.get(image_path_or_url, timeout=3)
-                img = Image.open(BytesIO(r.content))
+            if isinstance(image_path_or_url, str) and image_path_or_url.startswith('http'):
+                response = requests.get(image_path_or_url, timeout=2)
+                img = Image.open(BytesIO(response.content))
             else:
                 img = Image.open(image_path_or_url)
-
-            if img.mode in ("RGBA", "LA", "P"):
-                bg = Image.new("RGB", img.size, (255, 255, 255))
-                bg.paste(img, mask=img.split()[-1])
-                img = bg
-
-            img.thumbnail((max_width, max_height))
-            buf = BytesIO()
-            img.save(buf, "JPEG", quality=quality, optimize=True)
-            buf.seek(0)
-            return ImageReader(buf)
-        except:
+            
+            # Convert to RGB (removes alpha channel if present)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = background
+            
+            # Resize if larger than max dimensions
+            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            
+            # Save to buffer with compression
+            img_buffer = BytesIO()
+            img.save(img_buffer, format='JPEG', quality=quality, optimize=True)
+            img_buffer.seek(0)
+            
+            return ImageReader(img_buffer)
+        except Exception as e:
+            logger.warning(f"Image optimization failed: {e}")
             return None
 
+    def paginate_lines(lines, rows_per_page=30):
+        """Split lines into pages with specified rows per page"""
+        paginated = []
+        total_lines = len(lines)
+        
+        for i in range(0, total_lines, rows_per_page):
+            page_lines = lines[i:i + rows_per_page]
+            page_num = len(paginated) + 1
+            
+            # Check if this is the last page
+            is_last_page = (i + rows_per_page >= total_lines)
+            
+            paginated.append({
+                'pageNum': page_num,
+                'lines': page_lines,
+                'isLastPage': is_last_page,
+                'totalPages': (total_lines + rows_per_page - 1) // rows_per_page
+            })
+        
+        return paginated
+    
     try:
+        logger.info("📄 Starting PDF generation")
+        
+        # Get invoice data from request
         invoice_data = data.get("invoice")
         if not invoice_data:
             raise HTTPException(400, "Invoice data required")
-
+        
+        logger.info(f"📝 Received invoice data")
+        
+        # Extract invoice number or reference number for filename
         invoice = invoice_data.get("invoice", {})
-        paginated_data = invoice_data.get("paginatedData", [])
-
-        file_identifier = invoice.get("invoiceNo") or invoice.get("referenceNo") or safe_invoice_no
+        invoice_number = invoice.get('invoiceNo', '')
+        reference_number = invoice.get('referenceNo', '')
+        
+        # Use invoice number if available, otherwise use reference number
+        if invoice_number:
+            file_identifier = invoice_number
+        elif reference_number:
+            file_identifier = reference_number
+        else:
+            file_identifier = safe_invoice_no
+        
+        # Clean the filename for safe use
         safe_filename = ''.join(c for c in str(file_identifier) if c.isalnum() or c in ('_', '-', ' '))
-        if not safe_filename:
+        if not safe_filename.strip():
             safe_filename = "Invoice"
-
+        
+        # Create PDF
         pdf_buffer = BytesIO()
         doc = canvas.Canvas(pdf_buffer, pagesize=A4)
-        doc.setPageCompression(1)
-
-        # PAGE CONSTANTS
+        doc.setPageCompression(1) 
+        doc.setTitle(f"NOVOTEL - {safe_filename}")
+        
+        # Constants (matching jsPDF exactly)
         page_width = 210 * mm
         page_height = 297 * mm
         margin_l = 15 * mm
         margin_r = 15 * mm
-
-        # FONT
-        font_name = "Helvetica"
-
-        # LOAD IMAGES
-        logo_img = optimize_image("https://azar-front-end.vercel.app/novotel_logo.png")
-        stamp_img = optimize_image("https://azar-front-end.vercel.app/novotel_stemp.png")
-
-        # ROW SETTINGS
-        ROW_HEIGHT = 4.3 * mm   # EXACT for 28 rows
-        FIRST_PAGE_MAX_ROWS = 28
-        OTHER_PAGE_MAX_ROWS = 34
-
+        stamp_w = 30 * mm
+        stamp_h = 15 * mm
+        
+        # Load images
+        logo_img = None
+        stamp_img = None
+        
+        # Try multiple methods to load and optimize logo
+        logo_paths = [
+            "../app/routes/logo/novotel_logo/novotel_logo.png",
+            "./public/novotel_logo.png",
+            "../frontend/public/novotel_logo.png",
+            "https://azar-front-end.vercel.app/novotel_logo.png"
+        ]
+        
+        for path in logo_paths:
+            try:
+                if os.path.exists(path) or path.startswith('http'):
+                    logo_img = optimize_image(path, max_width=1000, max_height=200, quality=85)
+                    if logo_img:
+                        logger.info(f"✅ Logo loaded and optimized from: {path}")
+                        break
+            except:
+                continue
+        
+        if not logo_img:
+            logger.warning("⚠️ Logo not found")
+        
+        # Try multiple methods to load and optimize stamp
+        stamp_paths = [
+            "../app/routes/logo/novotel_logo/novotel_stemp.png",
+            "./public/novotel_stemp.png",
+            "../frontend/public/novotel_stemp.png",
+            "https://azar-front-end.vercel.app/novotel_stemp.png"
+        ]
+        
+        for path in stamp_paths:
+            try:
+                if os.path.exists(path) or path.startswith('http'):
+                    stamp_img = optimize_image(path, max_width=600, max_height=600, quality=85)
+                    if stamp_img:
+                        logger.info(f"✅ Stamp loaded and optimized from: {path}")
+                        break
+            except:
+                continue
+        
+        if not stamp_img:
+            logger.warning("⚠️ Stamp not found")
+        
+        # Get all lines and paginate them with 30 rows per page
+        all_lines = invoice.get("lines", [])
+        paginated_data = paginate_lines(all_lines, rows_per_page=30)
+        
+        # If no paginated data from client, create it from all lines
+        if not paginated_data and all_lines:
+            paginated_data = paginate_lines(all_lines, rows_per_page=30)
+        
+        # Process each page
         for page_idx, page_data in enumerate(paginated_data):
             if page_idx > 0:
                 doc.showPage()
-
-            total_pages = len(paginated_data)
-
-            # START Y POSITION (LESS TOP SPACE)
-            y = page_height - 8 * mm
-
-            # ================= LOGO =================
+            
+            total_pages = page_data.get('totalPages', len(paginated_data))
+            y = page_height - 12 * mm  # Start from top
+            
+            # 1. Logo (centered)
             if logo_img:
                 logo_w = 70 * mm
-                logo_h = 12 * mm
+                logo_h = 13 * mm
                 logo_x = (page_width - logo_w) / 2
-                doc.drawImage(logo_img, logo_x, y - logo_h, width=logo_w, height=logo_h)
-                y -= logo_h + 5 * mm
+                doc.drawImage(logo_img, logo_x, y - logo_h, width=logo_w, height=logo_h, preserveAspectRatio=True, mask='auto')
+                y -= logo_h + 15 * mm
             else:
-                y -= 10 * mm
-
-            # ================= HEADER INFO =================
+                y -= 20 * mm
+            
+            # 2. Header Info
             doc.setFont(font_name, 9)
             left_x = margin_l
             right_x = page_width / 2 + 5 * mm
-            line_h = 3.8 * mm
-
+            line_height = 4.2 * mm
+            
+            # Left Column
             ly = y
-            doc.drawString(left_x, ly, f"Name : {invoice.get('guestName','')}")
-            ly -= line_h
-            doc.drawString(left_x, ly, f"Person(s) : {invoice.get('persons','')}")
-            ly -= line_h
-            doc.drawString(left_x, ly, f"Room No. : {invoice.get('roomNo','')}")
-            ly -= line_h
-            doc.drawString(left_x, ly, f"Arrival : {invoice.get('arrival','')}")
-            ly -= line_h
-            doc.drawString(left_x, ly, f"Departure : {invoice.get('departure','')}")
-            ly -= line_h
+            doc.drawString(left_x, ly, f"Name : {invoice.get('guestName', '')}")
+            ly -= line_height
+            doc.drawString(left_x, ly, f"Person(s) : {invoice.get('persons', '')}")
+            ly -= line_height
+            doc.drawString(left_x, ly, f"Room No. : {invoice.get('roomNo', '')}")
+            ly -= line_height
+            doc.drawString(left_x, ly, f"Arrival : {invoice.get('arrival', '')}")
+            ly -= line_height
+            doc.drawString(left_x, ly, f"Departure : {invoice.get('departure', '')}")
+            ly -= line_height
             doc.drawString(left_x, ly, "Novotel Tunis Lac,")
-            ly -= line_h
-            doc.drawString(left_x, ly, f"The {invoice.get('issueDate','')}")
-
+            ly -= line_height
+            doc.drawString(left_x, ly, f"The {invoice.get('issueDate', '')}")
+            
+            # Right Column
             ry = y
-            doc.drawString(right_x, ry, f"Company : {invoice.get('companyName','')}")
-            ry -= line_h
-            doc.drawString(right_x, ry, f"Address : {invoice.get('companyAddress','')}")
-            ry -= line_h
-            doc.drawString(right_x, ry, f"Account NO : {invoice.get('accountNo','')}")
-            ry -= line_h
-            doc.drawString(right_x, ry, f"VAT No : {invoice.get('vatNo','')}")
-            ry -= line_h
-            doc.drawString(right_x, ry, f"Invoice No: {invoice.get('invoiceNo','')}")
-            ry -= line_h
-            doc.drawString(right_x, ry, f"Cashier : {invoice.get('cashier','')}")
-            ry -= line_h
-            doc.drawString(right_x, ry, f"Pages : {page_data.get('pageNum',1)} of {total_pages}")
-
-            y = min(ly, ry) - 5 * mm
-
-            # ================= TABLE HEADER =================
-            doc.setFillColorRGB(0.92, 0.92, 0.92)
+            right_max_w = page_width - margin_r - right_x
+            
+            # Company (with wrapping)
+            company_text = f"Company : {invoice.get('companyName', '')}"
+            if doc.stringWidth(company_text, font_name, 9) > right_max_w:
+                words = company_text.split()
+                line = ""
+                for word in words:
+                    test = line + " " + word if line else word
+                    if doc.stringWidth(test, font_name, 9) <= right_max_w:
+                        line = test
+                    else:
+                        if line:
+                            doc.drawString(right_x, ry, line)
+                            ry -= line_height
+                        line = word
+                if line:
+                    doc.drawString(right_x, ry, line)
+                    ry -= line_height
+            else:
+                doc.drawString(right_x, ry, company_text)
+                ry -= line_height
+            
+            # Address (with wrapping)
+            address_text = f"Address : {invoice.get('companyAddress', '')}"
+            if doc.stringWidth(address_text, font_name, 9) > right_max_w:
+                words = address_text.split()
+                line = ""
+                for word in words:
+                    test = line + " " + word if line else word
+                    if doc.stringWidth(test, font_name, 9) <= right_max_w:
+                        line = test
+                    else:
+                        if line:
+                            doc.drawString(right_x, ry, line)
+                            ry -= line_height
+                        line = word
+                if line:
+                    doc.drawString(right_x, ry, line)
+                    ry -= line_height
+            else:
+                doc.drawString(right_x, ry, address_text)
+                ry -= line_height
+            
+            ry -= 1 * mm
+            doc.drawString(right_x, ry, f"Account NO : {invoice.get('accountNo', '')}")
+            ry -= line_height
+            doc.drawString(right_x, ry, f"VAT No : {invoice.get('vatNo', '')}")
+            ry -= line_height
+            doc.drawString(right_x, ry, f"Invoice No: {invoice.get('invoiceNo', '')}")
+            ry -= line_height
+            doc.drawString(right_x, ry, f"Cashier : {invoice.get('cashier', '')}")
+            ry -= line_height
+            doc.drawString(right_x, ry, f"Pages : {page_data.get('pageNum', 1)} of {total_pages}")
+            
+            # Move y to the lower of the two columns
+            y = min(ly, ry) - 10 * mm  # Increased from 8mm to 10mm
+            
+            # 3. Table Header
+            doc.setFillColorRGB(235/255, 235/255, 235/255)
             doc.rect(margin_l, y - 7 * mm, page_width - margin_l - margin_r, 7 * mm, fill=1, stroke=0)
-            doc.setFillColorRGB(0,0,0)
-            doc.setFont(font_name, 9)
+            doc.setStrokeColorRGB(0, 0, 0)
+            doc.setLineWidth(0.3)
+            doc.line(margin_l, y, page_width - margin_r, y)
+            doc.line(margin_l, y - 7 * mm, page_width - margin_r, y - 7 * mm)
 
+            doc.setFillColorRGB(0, 0, 0)
+            doc.setFont(font_name, 9)
             doc.drawString(margin_l + 2 * mm, y - 5 * mm, "Date")
             doc.drawString(margin_l + 30 * mm, y - 5 * mm, "Description")
-            doc.drawRightString(page_width - margin_r - 35 * mm, y - 3 * mm, "Debits")
-            doc.drawRightString(page_width - margin_r - 35 * mm, y - 6 * mm, invoice.get("currency","TND"))
-            doc.drawRightString(page_width - margin_r - 2 * mm, y - 3 * mm, "Credits")
-            doc.drawRightString(page_width - margin_r - 2 * mm, y - 6 * mm, invoice.get("currency","TND"))
 
-            y -= 6 * mm   # SMALL GAP
-
-            # ================= TABLE ROWS =================
+            # DEBITS
+            doc.drawRightString(page_width - margin_r - 35 * mm, y - 2.5 * mm, "Debits")
             doc.setFont(font_name, 9)
-            for line in page_data.get("lines", []):
-                doc.drawString(margin_l + 2 * mm, y, line.get("date",""))
-                doc.drawString(margin_l + 30 * mm, y, line.get("description",""))
-                doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{float(line.get('debit',0)):.3f}")
-                doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{float(line.get('credit',0)):.3f}")
-                y -= ROW_HEIGHT
+            doc.drawRightString(page_width - margin_r - 35 * mm, y - 6.5 * mm, invoice.get('currency', 'TND'))
 
-            # ================= FOOTER (ONLY LAST PAGE) =================
-            if page_data.get("isLastPage", False):
-                all_lines = invoice.get("lines", [])
-                total_debit = sum(float(l.get("debit",0)) for l in all_lines)
-                total_credit = sum(float(l.get("credit",0)) for l in all_lines)
-                exchange_rate = float(invoice.get("exchangeRate", 2.8))
+            # CREDITS
+            doc.setFont(font_name, 9)
+            doc.drawRightString(page_width - margin_r - 2 * mm, y - 2.5 * mm, "Credits")
+            doc.setFont(font_name, 9)
+            doc.drawRightString(page_width - margin_r - 2 * mm, y - 6.5 * mm, invoice.get('currency', 'TND'))
+                        
+            # Move down after the header
+            y -= 12 * mm
+            
+            # 4. Table Rows (30 rows per page)
+            doc.setFont(font_name, 9)
+            row_height = 4.2 * mm  # Reduced from 5mm to fit 30 rows
+            
+            # Get lines for this page (max 30)
+            page_lines = page_data.get('lines', [])
+            
+            # Display up to 30 rows
+            for line_idx, line in enumerate(page_lines[:30]):
+                if y < 50 * mm:  # Prevent writing too low on page
+                    break
+                    
+                doc.drawString(margin_l + 2 * mm, y, line.get('date', ''))
+                doc.drawString(margin_l + 30 * mm, y, line.get('description', ''))
+                
+                # Format debit and credit values
+                debit_val = float(line.get('debit', 0))
+                credit_val = float(line.get('credit', 0))
+                
+                doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{debit_val:.3f}")
+                doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{credit_val:.3f}")
+                y -= row_height
+            
+            # Fill empty rows if less than 30 on this page (except last page)
+            if not page_data.get('isLastPage', False):
+                rows_displayed = min(len(page_lines), 30)
+                empty_rows = 30 - rows_displayed
+                y -= row_height * empty_rows
+            
+            # 5. Footer (only on last page)
+            if page_data.get('isLastPage', False):
+                # Calculate totals
+                total_debit = sum(float(l.get('debit', 0)) for l in all_lines)
+                total_credit = sum(float(l.get('credit', 0)) for l in all_lines)
+                exchange_rate = float(invoice.get('exchangeRate', 2.80))
                 total_usd = total_debit / exchange_rate
-                currency = invoice.get("currency","TND")
-
-                y -= 3 * mm
+                currency = invoice.get('currency', 'TND')
+                
+                # Make sure we have enough space at bottom
+                if y > 100 * mm:
+                    y = 100 * mm  # Fixed position for footer
+                
+                # Total line
                 doc.line(margin_l, y, page_width - margin_r, y)
-                y -= 4 * mm
-
+                y -= 4.2 * mm
+                
+                # Total row
+                doc.setFont(font_name, 9)
                 doc.drawString(margin_l + 80 * mm, y, "Total")
                 doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{total_debit:.3f}")
                 doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{total_credit:.3f}")
-
-                y -= 5 * mm
+                
+                y -= 2 * mm
+                # Balance line
+                doc.line(margin_l + 80 * mm, y, page_width - margin_r, y)
+                y -= 4.2 * mm
+                
+                # Balance row
                 doc.drawString(margin_l + 80 * mm, y, "Balance")
                 doc.drawString(page_width - margin_r - 80 * mm, y, f"{total_debit:.3f} {currency}")
-
-            # ================= STAMP =================
+                
+                # Tax section
+                tax_row_height = 4.2 * mm
+                tax_x = page_width / 2 + 10 * mm
+                tax_val_x = page_width - margin_r
+                
+                # Start tax table at fixed position from bottom
+                tax_start_y = 50 * mm  # Fixed position 50mm from bottom
+                ty = tax_start_y
+                
+                # Tax values from invoice
+                taxes = [
+                    ("Net Taxable", invoice.get('netTaxable', total_debit)),
+                    ("FDCST 1 %", invoice.get('fdsct', 0)),
+                    ("VAT 7%", invoice.get('vat7Total', 0)),
+                    ("VAT 19%", 0),
+                    ("City Tax", invoice.get('cityTaxTotal', 0)),
+                    ("Stamp Tax", invoice.get('stampTaxTotal', 0)),
+                    ("Non Revenue", 0),
+                    ("Paid Out", 0),
+                    ("Total Gross", invoice.get('grossTotal', total_debit))
+                ]
+                
+                for label, value in taxes:
+                    doc.drawString(tax_x, ty, label)
+                    doc.drawRightString(tax_val_x, ty, f"{float(value):.3f} {currency}")
+                    ty -= tax_row_height
+                
+                # USD Exchange Rate section (aligned with tax table)
+                doc.setFont(font_name, 9)
+                usd_y = tax_start_y - (len(taxes) - 2) * tax_row_height
+                
+                doc.drawString(margin_l, usd_y, "USD Exch. Rate:")
+                doc.drawString(margin_l + 28 * mm, usd_y, f"{exchange_rate:.2f} {currency}")
+                usd_y -= tax_row_height
+                doc.drawString(margin_l, usd_y, "Total in USD:")
+                doc.drawString(margin_l + 28 * mm, usd_y, f"{total_usd:.2f} USD")
+            
+            # 6. Stamp (on EVERY page - bottom right corner)
             if stamp_img:
-                stamp_w = 30 * mm
-                stamp_h = 15 * mm
                 stamp_x = page_width - stamp_w - 5 * mm
                 stamp_y = 10 * mm
-                doc.drawImage(stamp_img, stamp_x, stamp_y, width=stamp_w, height=stamp_h)
-
+                doc.drawImage(stamp_img, stamp_x, stamp_y, width=stamp_w, height=stamp_h, preserveAspectRatio=False, mask='auto')
+        
+        # Save PDF
         doc.save()
         pdf_bytes = pdf_buffer.getvalue()
         pdf_buffer.close()
-
-        filename = f"NOVOTEL_{safe_filename}.pdf"
-
+        
+        if len(pdf_bytes) < 1000:
+            raise RuntimeError("PDF too small")
+        
+        # Create proper filename
+        pdf_filename = f"NOVOTEL_{safe_filename}.pdf"
+        
+        logger.info(f"✅ PDF generated: {len(pdf_bytes)} bytes - Filename: {pdf_filename}")
+        logger.info(f"📊 Pages: {len(paginated_data)}, Rows per page: 30")
+        
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename={filename}'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{pdf_filename}"',
+                "Content-Length": str(len(pdf_bytes)),
+                "Cache-Control": "no-cache"
+            }
         )
-
+    
     except Exception as e:
-        raise HTTPException(500, f"PDF Error: {str(e)}")
+        logger.error(f"❌ Error: {str(e)}", exc_info=True)
+        raise HTTPException(500, f"PDF failed: {str(e)}")
