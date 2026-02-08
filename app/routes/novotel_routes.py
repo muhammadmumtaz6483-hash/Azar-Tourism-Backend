@@ -862,7 +862,7 @@ async def delete_invoice_endpoint(invoice_id: int, db: AsyncSession = Depends(ge
 async def generate_pdf_direct(data: dict):
     """
     Generate PDF with exact jsPDF positioning using ReportLab
-    Now with 30 rows per page and 6mm row height
+    Fixed 30 rows per page with proper footer spacing
     """
 
     invoice_no = str(data.get('invoiceNo', 'invoice'))
@@ -1142,72 +1142,44 @@ async def generate_pdf_direct(data: dict):
             # Move down after the header
             y -= 12 * mm
             
-            # 4. Table Rows (30 rows per page with 6mm height)
+            # 4. Table Rows (Exactly 30 rows per page)
             doc.setFont(font_name, 9)
-            row_height = 6 * mm  # Changed to 6mm as requested
+            row_height = 5 * mm  # Optimal height for 30 rows
             
-            # Get lines for this page (max 30)
+            # Get lines for this page
             page_lines = page_data.get('lines', [])
             
-            # Display up to 30 rows
-            rows_displayed = 0
-            for line_idx, line in enumerate(page_lines):
-                if rows_displayed >= 30 or y < 80 * mm:  # Stop if 30 rows or too low
-                    break
+            # Display exactly 30 rows (or available rows for last page)
+            rows_to_display = 30 if not page_data.get('isLastPage', False) else len(page_lines)
+            
+            for line_idx in range(rows_to_display):
+                if line_idx < len(page_lines):
+                    line = page_lines[line_idx]
+                    doc.drawString(margin_l + 2 * mm, y, line.get('date', ''))
+                    doc.drawString(margin_l + 30 * mm, y, line.get('description', ''))
                     
-                doc.drawString(margin_l + 2 * mm, y, line.get('date', ''))
-                doc.drawString(margin_l + 30 * mm, y, line.get('description', ''))
-                
-                # Format debit and credit values
-                debit_val = float(line.get('debit', 0))
-                credit_val = float(line.get('credit', 0))
-                
-                doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{debit_val:.3f}")
-                doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{credit_val:.3f}")
+                    debit_val = float(line.get('debit', 0))
+                    credit_val = float(line.get('credit', 0))
+                    
+                    doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{debit_val:.3f}")
+                    doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{credit_val:.3f}")
+                else:
+                    # Empty row for spacing
+                    pass
                 
                 y -= row_height
-                rows_displayed += 1
-            
-            # Fill empty rows if less than 30 on this page (except last page)
-            if not page_data.get('isLastPage', False):
-                empty_rows = 30 - rows_displayed
-                y -= row_height * empty_rows
             
             # 5. Footer (only on last page)
             if page_data.get('isLastPage', False):
                 # Calculate totals
                 total_debit = sum(float(l.get('debit', 0)) for l in all_lines)
                 total_credit = sum(float(l.get('credit', 0)) for l in all_lines)
-                exchange_rate = float(invoice.get('exchangeRate', 2.80))
+                exchange_rate = float(invoice.get('exchangeRate', 2.85))
                 total_usd = total_debit / exchange_rate
                 currency = invoice.get('currency', 'TND')
                 
-                # Make sure we have enough space at bottom
-                # Start footer at fixed position (75mm from bottom)
-                footer_start_y = 75 * mm
-                
-                # Total line
-                doc.line(margin_l, footer_start_y, page_width - margin_r, footer_start_y)
-                
-                # Total row
-                doc.setFont(font_name, 9)
-                doc.drawString(margin_l + 80 * mm, footer_start_y - 4.2 * mm, "Total")
-                doc.drawRightString(page_width - margin_r - 35 * mm, footer_start_y - 4.2 * mm, f"{total_debit:.3f}")
-                doc.drawRightString(page_width - margin_r - 2 * mm, footer_start_y - 4.2 * mm, f"{total_credit:.3f}")
-                
-                # Balance line
-                balance_y = footer_start_y - 6.2 * mm
-                doc.line(margin_l + 80 * mm, balance_y, page_width - margin_r, balance_y)
-                
-                # Balance row
-                doc.drawString(margin_l + 80 * mm, balance_y - 4.2 * mm, "Balance")
-                balance_text = f"{total_debit:.3f} {currency}"
-                balance_text_width = doc.stringWidth(balance_text, font_name, 9)
-                doc.drawString(page_width - margin_r - balance_text_width - 2 * mm, balance_y - 4.2 * mm, balance_text)
-                
-                # Tax section - RIGHT SIDE (as per your second image)
-                # Calculate tax values
-                net_taxable = float(invoice.get('netTaxable', total_debit))
+                # Calculate tax values (as per your image)
+                net_taxable = float(invoice.get('netTaxable', total_debit * 100/109.19))
                 fdcst = float(invoice.get('fdsct', net_taxable * 0.01))
                 vat7 = float(invoice.get('vat7Total', net_taxable * 0.07))
                 vat19 = 0.0
@@ -1217,18 +1189,44 @@ async def generate_pdf_direct(data: dict):
                 paid_out = 0.0
                 total_gross = float(invoice.get('grossTotal', total_debit))
                 
-                # Tax table positioning - as shown in your second image
-                tax_start_y = footer_start_y - 15 * mm  # Start 15mm below total line
-                tax_x = page_width / 2 + 10 * mm
+                # Adjust y position to have less space before footer
+                # Start footer closer to last row
+                if y > 60 * mm:
+                    y = 60 * mm  # Reduced space
+                
+                # Total line
+                doc.line(margin_l, y, page_width - margin_r, y)
+                y -= 4.2 * mm
+                
+                # Total row
+                doc.setFont(font_name, 9)
+                doc.drawString(margin_l + 80 * mm, y, "Total")
+                doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{total_debit:.3f}")
+                doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{total_credit:.3f}")
+                
+                y -= 2 * mm
+                # Balance line (shorter line as in your image)
+                doc.line(margin_l + 80 * mm, y, page_width - margin_r, y)
+                y -= 4.2 * mm
+                
+                # Balance row
+                doc.drawString(margin_l + 80 * mm, y, "Balance")
+                balance_text = f"{total_debit:.3f} {currency}"
+                balance_text_width = doc.stringWidth(balance_text, font_name, 9)
+                doc.drawString(page_width - margin_r - balance_text_width - 2 * mm, y, balance_text)
+                
+                # Tax section - RIGHT SIDE (compact as per your image)
+                tax_start_y = y - 8 * mm  # Close to balance
+                tax_x = margin_l + 80 * mm  # Aligned with "Balance"
                 tax_val_x = page_width - margin_r
-                tax_row_height = 4.2 * mm
+                tax_row_height = 4 * mm  # Compact spacing
                 
                 ty = tax_start_y
                 
-                # Tax items (right aligned as per your image)
+                # Tax items list
                 tax_items = [
                     ("Net Taxable", f"{net_taxable:.3f} {currency}"),
-                    ("FDCST 1 %", f"{fdcst:.3f} {currency}"),
+                    ("FDCTST 1 %", f"{fdcst:.3f} {currency}"),
                     ("VAT 7%", f"{vat7:.3f} {currency}"),
                     ("VAT 19%", f"{vat19:.3f} {currency}"),
                     ("City Tax", f"{city_tax:.3f} {currency}"),
@@ -1238,27 +1236,26 @@ async def generate_pdf_direct(data: dict):
                     ("Total Gross", f"{total_gross:.3f} {currency}")
                 ]
                 
+                # Draw tax table (compact, no extra spacing)
                 for label, value in tax_items:
-                    # Draw label
                     doc.drawString(tax_x, ty, label)
-                    # Draw value (right aligned)
                     doc.drawRightString(tax_val_x, ty, value)
                     ty -= tax_row_height
                 
-                # USD Exchange Rate section - LEFT SIDE (aligned with last 2 tax rows)
-                # Calculate position for USD section (aligned with "Paid Out" and "Total Gross")
+                # USD Exchange Rate section - LEFT SIDE (compact)
+                # Position aligned with last rows of tax table
                 usd_start_y = tax_start_y - (len(tax_items) - 2) * tax_row_height
                 
                 doc.setFont(font_name, 9)
                 
                 # USD Exch. Rate (aligned with "Paid Out")
                 doc.drawString(margin_l, usd_start_y, "USD Exch. Rate:")
-                doc.drawString(margin_l + 28 * mm, usd_start_y, f"{exchange_rate:.2f} {currency}")
+                doc.drawString(margin_l + 32 * mm, usd_start_y, f"{exchange_rate:.2f} {currency}")
                 
                 # Total in USD (aligned with "Total Gross")
                 usd_start_y -= tax_row_height
                 doc.drawString(margin_l, usd_start_y, "Total in USD:")
-                doc.drawString(margin_l + 28 * mm, usd_start_y, f"{total_usd:.2f} USD")
+                doc.drawString(margin_l + 32 * mm, usd_start_y, f"{total_usd:.2f} USD")
             
             # 6. Stamp (on EVERY page - bottom right corner)
             if stamp_img:
@@ -1278,7 +1275,7 @@ async def generate_pdf_direct(data: dict):
         pdf_filename = f"NOVOTEL_{safe_filename}.pdf"
         
         logger.info(f"✅ PDF generated: {len(pdf_bytes)} bytes - Filename: {pdf_filename}")
-        logger.info(f"📊 Pages: {len(paginated_data)}, Rows per page: 30, Row height: 6mm")
+        logger.info(f"📊 Pages: {len(paginated_data)}, Rows per page: 30")
         
         return Response(
             content=pdf_bytes,
