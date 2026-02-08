@@ -855,6 +855,7 @@ async def delete_invoice_endpoint(invoice_id: int, db: AsyncSession = Depends(ge
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ==================== ENDPOINT 8: PDF Generate ====================
 @n_router.post("/generate-pdf-direct")
 async def generate_pdf_direct(data: dict):
@@ -1115,19 +1116,14 @@ async def generate_pdf_direct(data: dict):
             
             # 5. Table Rows
             doc.setFont(font_name, 9)
-            row_height = 6 * mm   # Increased from 5mm - more spacing between rows
-
-            if page_idx == 0:
-                 lines = page_data.get('lines', [])[:8]
-            else:
-                  lines = page_data.get('lines', [])
+            row_height = 5 * mm   # Increased from 5mm - more spacing between rows
             
-            for line in lines:
-                  doc.drawString(margin_l + 2 * mm, y, line.get('date', ''))
-                  doc.drawString(margin_l + 30 * mm, y, line.get('description', ''))
-                  doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{float(line.get('debit', 0)):.3f}")
-                  doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{float(line.get('credit', 0)):.3f}")
-                  y -= row_height
+            for line in page_data.get('lines', []):
+                doc.drawString(margin_l + 2 * mm, y, line.get('date', ''))
+                doc.drawString(margin_l + 30 * mm, y, line.get('description', ''))
+                doc.drawRightString(page_width - margin_r - 35 * mm, y, f"{float(line.get('debit', 0)):.3f}")
+                doc.drawRightString(page_width - margin_r - 2 * mm, y, f"{float(line.get('credit', 0)):.3f}")
+                y -= row_height
             
             # 6. Footer (only on last page)
             if page_data.get('isLastPage', False):
