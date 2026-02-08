@@ -1115,7 +1115,7 @@ async def generate_pdf_direct(data: dict):
             
             # 5. Table Rows
             doc.setFont(font_name, 9)
-            row_height = 8 * mm   # Increased from 5mm - more spacing between rows
+            row_height = 5 * mm   # Increased from 5mm - more spacing between rows
             
             for line in page_data.get('lines', []):
                 doc.drawString(margin_l + 2 * mm, y, line.get('date', ''))
