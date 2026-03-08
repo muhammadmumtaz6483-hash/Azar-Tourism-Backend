@@ -38,7 +38,7 @@ def status_expr(model):
     return func.lower(
         func.trim(
             func.coalesce(
-                model.data["data"]["status"].astext,
+                model.data["data"]["data"]["data"]["status"].astext,
                 ""
             )
         )
