@@ -1,5 +1,5 @@
 def main():
-    print("Hello from azar-backend!")
+    print("Azar Backend Code!")
 
 
 if __name__ == "__main__":

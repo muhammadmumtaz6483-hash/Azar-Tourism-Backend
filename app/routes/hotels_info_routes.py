@@ -20,6 +20,7 @@ async def create_hotel_invoice(
         invoice = HotelsInfo(
             hotel_name=payload.get("hotel_name"),
             currency=payload.get("currency"),
+            country=payload.get("country"), 
             form_fields=payload.get("form_fields"),
 
             accommodation_details=conditional.get("accommodation_details"),
@@ -57,6 +58,7 @@ async def get_all_hotel_invoices(db: AsyncSession = Depends(get_db)):
                 "id": inv.id, 
                 "hotel_name": inv.hotel_name,
                 "currency": inv.currency,
+                "country": inv.country, 
                 "form_fields": inv.form_fields or [],
                 "conditional_sections": {
                     "accommodation_details": inv.accommodation_details or {},
@@ -95,6 +97,7 @@ async def get_hotel_invoice_by_id(invoice_id: int, db: AsyncSession = Depends(ge
             "id": inv.id, 
             "hotel_name": inv.hotel_name,
             "currency": inv.currency,
+            "country": inv.country, 
             "form_fields": inv.form_fields or [],
             "conditional_sections": {
                 "accommodation_details": inv.accommodation_details or {},
@@ -131,6 +134,7 @@ async def get_invoices_by_hotel_name(hotel_name: str, db: AsyncSession = Depends
                 "id": inv.id, 
                 "hotel_name": inv.hotel_name,
                 "currency": inv.currency,
+                "country": inv.country, 
                 "form_fields": inv.form_fields or [],
                 "conditional_sections": {
                     "accommodation_details": inv.accommodation_details or {},
@@ -166,6 +170,7 @@ async def update_hotel_invoice(invoice_id: int, payload: dict, db: AsyncSession 
         # Update top-level fields
         invoice.hotel_name = payload.get("hotel_name", invoice.hotel_name)
         invoice.currency = payload.get("currency", invoice.currency)
+        invoice.country = payload.get("country", invoice.country)
         invoice.form_fields = payload.get("form_fields", invoice.form_fields)
         invoice.final_calculations = payload.get("final_calculations", invoice.final_calculations)
 
@@ -185,6 +190,7 @@ async def update_hotel_invoice(invoice_id: int, payload: dict, db: AsyncSession 
         updated_data = {
             "hotel_name": invoice.hotel_name,
             "currency": invoice.currency,
+            "country": invoice.country,
             "form_fields": invoice.form_fields or [],
             "conditional_sections": {
                 "accommodation_details": invoice.accommodation_details or {},

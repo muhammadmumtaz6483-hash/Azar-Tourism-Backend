@@ -11,6 +11,8 @@ class HotelsInfo(Base):
 
     currency = Column(String(3), nullable=False)
 
+    country = Column(String(100), nullable=True)
+
     form_fields = Column(JSONB, nullable=False)
 
     accommodation_details = Column(JSONB, nullable=True)
