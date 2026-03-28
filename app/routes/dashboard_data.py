@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status,Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 # from sqlalchemy import func, case, select
@@ -6,9 +6,9 @@ from models.egypt_hotel import EgyptHotel
 from models.turkey_hotel import TurkeyHotel 
 from sqlalchemy import select, func, case, union_all
 from routes.services.invoice_service import get_all_invoice_records
-from routes.services.turkey_hotel_service import get_all_turkey_hotels
-from routes.services.egypt_hotel_service import get_all_egypt_hotels   
-from routes.services.malaysia_hotel_service import get_all_malaysia_hotels 
+from routes.services.turkey_hotel_service import get_all_turkey_hotels, get_all_turkey_hotels_by_page
+from routes.services.egypt_hotel_service import get_all_egypt_hotels ,get_all_egypt_hotels_by_page  
+from routes.services.malaysia_hotel_service import get_all_malaysia_hotels, get_all_malaysia_hotels_by_page
 
 router = APIRouter(
     prefix="/api/dashboard",
@@ -30,6 +30,34 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
             "turkey_hotels": turkey_hotels_data,
             "egypt_hotels": egypt_hotels_data,
             "malaysia_hotels": malaysia_hotels_data     
+        }
+    }
+
+@router.get("/getbypage", status_code=status.HTTP_200_OK)
+async def dashboard_data(
+    page: int = Query(1, ge=1),
+    db: AsyncSession = Depends(get_db)
+):
+    page_size = 10
+    offset = (page - 1) * page_size
+
+    # invoices_data = await get_all_invoice_records_by_page(db, offset, page_size)
+    turkey_hotels_data = await get_all_turkey_hotels_by_page(db, offset, page_size)
+    egypt_hotels_data = await get_all_egypt_hotels_by_page(db, offset, page_size)
+    malaysia_hotels_data = await get_all_malaysia_hotels_by_page(db, offset, page_size)
+
+    return {
+        "success": True,
+        "message": "Dashboard data loaded successfully",
+        "pagination": {
+            "page": page,
+            "page_size": page_size   
+        },
+        "data": {
+            # "invoices": invoices_data,
+            "turkey_hotels": turkey_hotels_data,
+            "egypt_hotels": egypt_hotels_data,
+            "malaysia_hotels": malaysia_hotels_data
         }
     }
 

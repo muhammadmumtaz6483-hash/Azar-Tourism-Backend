@@ -10,3 +10,13 @@ async def get_all_egypt_hotels(db: AsyncSession):
         "count": len(records),
         "records": records
     }
+
+async def get_all_egypt_hotels_by_page(db: AsyncSession, offset: int, limit: int):
+    query = select(EgyptHotel).offset(offset).limit(limit)
+    result = await db.execute(query)
+    records = result.scalars().all()
+
+    return {
+        "count": len(records),
+        "records": records
+    }
