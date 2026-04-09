@@ -13,6 +13,8 @@ from routes.hotels_info_routes import router as hotels_info_router
 from routes.turkey_invoices_routes import router as turkey_invoices_router 
 from routes.egypt_invoices_routes import router as egypt_invoices_router   
 from routes.malaysia_invoices_routes import router as malaysia_invoices_router 
+from routes.uk_invoices_routes import router as uk_invoices_router  
+# from routes.dubai_invoices_routes import router as dubai_invoices_router
 from routes.admin_routes import router as admin_router  
 from routes.dashboard_data import router as dashboard_router    
 # from routes.employees_routes import router as employees_router 
@@ -79,6 +81,8 @@ app.include_router(hotels_info_router)
 app.include_router(turkey_invoices_router)
 app.include_router(egypt_invoices_router)   
 app.include_router(malaysia_invoices_router)
+app.include_router(uk_invoices_router)
+# app.include_router(dubai_invoices_router)
 app.include_router(admin_router)
 app.include_router(dashboard_router)
 

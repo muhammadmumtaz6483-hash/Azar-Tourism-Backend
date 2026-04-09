@@ -11,14 +11,12 @@ async def get_all_malaysia_hotels(db: AsyncSession):
         "records": records
     }
 
-
-
 async def get_all_malaysia_hotels_by_page(db: AsyncSession, offset: int, limit: int):
     query = select(MalaysiaHotel).offset(offset).limit(limit)
     result = await db.execute(query)
     records = result.scalars().all()
 
     return {
-        "count": len(records),   # current page records count
+        "count": len(records),   
         "records": records
     }
