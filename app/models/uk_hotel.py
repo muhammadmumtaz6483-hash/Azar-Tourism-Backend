@@ -1,5 +1,5 @@
 from sqlalchemy import DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID,JSONB
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
@@ -17,8 +17,8 @@ class UKHotel(Base):
         default=uuid.uuid4
     )
 
-    data: Mapped[str] = mapped_column(
-       String,
+    data: Mapped[dict] = mapped_column(
+       JSONB,
        nullable=False
     )
 
