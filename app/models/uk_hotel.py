@@ -1,6 +1,5 @@
 from sqlalchemy import DateTime
-from sqlalchemy.dialects.postgresql import UUID,JSONB
-from sqlalchemy import String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 import uuid
@@ -18,8 +17,8 @@ class UKHotel(Base):
     )
 
     data: Mapped[dict] = mapped_column(
-       JSONB,
-       nullable=False
+        JSONB,
+        nullable=False
     )
 
     created_at: Mapped[datetime] = mapped_column(
