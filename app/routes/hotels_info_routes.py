@@ -48,7 +48,137 @@ async def create_hotel_invoice(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/by-country")
+async def get_hotels_by_country(
+    country: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        result = await db.execute(
+            select(HotelsInfo).where(HotelsInfo.country == country)
+        )
+        hotels = result.scalars().all()
 
+        data = []
+        for inv in hotels:
+            data.append({
+                "id": inv.id,
+                "hotel_name": inv.hotel_name,
+                "currency": inv.currency,
+                "country": inv.country,
+                "form_fields": inv.form_fields or [],
+                "conditional_sections": {
+                    "accommodation_details": inv.accommodation_details or {},
+                    "city_tax": inv.city_tax or {},
+                    "stamp_tax": inv.stamp_tax or {},
+                    "other_services": inv.other_services or {}
+                },
+                "final_calculations": inv.final_calculations or {},
+                "created_at": inv.created_at
+            })
+
+        return {
+            "count": len(data),
+            "data": data
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@router.get("/paginated")
+async def get_paginated_hotels(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        offset = (page - 1) * limit
+
+        # 🔥 IMPORTANT: newest first
+        result = await db.execute(
+            select(HotelsInfo)
+            .order_by(desc(HotelsInfo.created_at))
+            .offset(offset)
+            .limit(limit)
+        )
+        hotels = result.scalars().all()
+
+        # Total count
+        total_result = await db.execute(select(func.count(HotelsInfo.id)))
+        total = total_result.scalar()
+
+        data = []
+        for inv in hotels:
+            data.append({
+                "id": inv.id,
+                "hotel_name": inv.hotel_name,
+                "currency": inv.currency,
+                "country": inv.country,
+                "form_fields": inv.form_fields or [],
+                "conditional_sections": {
+                    "accommodation_details": inv.accommodation_details or {},
+                    "city_tax": inv.city_tax or {},
+                    "stamp_tax": inv.stamp_tax or {},
+                    "other_services": inv.other_services or {}
+                },
+                "final_calculations": inv.final_calculations or {},
+                "created_at": inv.created_at
+            })
+
+        return {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": (total + limit - 1) // limit,
+            "data": data
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hotel-names")
+async def get_all_hotel_names(db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(
+            select(HotelsInfo.hotel_name)
+            .order_by(HotelsInfo.hotel_name)
+        )
+
+        hotel_names = result.scalars().all()
+
+        return {
+            "count": len(hotel_names),
+            "data": hotel_names
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/countries")
+async def get_all_countries(db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(
+            select(HotelsInfo.country)
+            .distinct()
+            .order_by(HotelsInfo.country)
+        )
+
+        countries = result.scalars().all()
+
+        # remove None/null if exists
+        countries = [c for c in countries if c]
+
+        return {
+            "count": len(countries),
+            "data": countries
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @router.get("/")
 async def get_all_hotel_invoices(db: AsyncSession = Depends(get_db)):
     try:
@@ -213,8 +343,6 @@ async def update_hotel_invoice(invoice_id: int, payload: dict, db: AsyncSession 
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
 @router.delete("/{invoice_id}")
 async def delete_hotel_invoice(
     invoice_id: int,
@@ -249,136 +377,3 @@ async def delete_hotel_invoice(
             status_code=500,
             detail=str(e)
         )
-
-from fastapi import Query
-
-@router.get("/by-country")
-async def get_hotels_by_country(
-    country: str = Query(...),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        result = await db.execute(
-            select(HotelsInfo).where(HotelsInfo.country == country)
-        )
-        hotels = result.scalars().all()
-
-        data = []
-        for inv in hotels:
-            data.append({
-                "id": inv.id,
-                "hotel_name": inv.hotel_name,
-                "currency": inv.currency,
-                "country": inv.country,
-                "form_fields": inv.form_fields or [],
-                "conditional_sections": {
-                    "accommodation_details": inv.accommodation_details or {},
-                    "city_tax": inv.city_tax or {},
-                    "stamp_tax": inv.stamp_tax or {},
-                    "other_services": inv.other_services or {}
-                },
-                "final_calculations": inv.final_calculations or {},
-                "created_at": inv.created_at
-            })
-
-        return {
-            "count": len(data),
-            "data": data
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-
-@router.get("/paginated")
-async def get_paginated_hotels(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        offset = (page - 1) * limit
-
-        # 🔥 IMPORTANT: newest first
-        result = await db.execute(
-            select(HotelsInfo)
-            .order_by(desc(HotelsInfo.created_at))
-            .offset(offset)
-            .limit(limit)
-        )
-        hotels = result.scalars().all()
-
-        # Total count
-        total_result = await db.execute(select(func.count(HotelsInfo.id)))
-        total = total_result.scalar()
-
-        data = []
-        for inv in hotels:
-            data.append({
-                "id": inv.id,
-                "hotel_name": inv.hotel_name,
-                "currency": inv.currency,
-                "country": inv.country,
-                "form_fields": inv.form_fields or [],
-                "conditional_sections": {
-                    "accommodation_details": inv.accommodation_details or {},
-                    "city_tax": inv.city_tax or {},
-                    "stamp_tax": inv.stamp_tax or {},
-                    "other_services": inv.other_services or {}
-                },
-                "final_calculations": inv.final_calculations or {},
-                "created_at": inv.created_at
-            })
-
-        return {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "total_pages": (total + limit - 1) // limit,
-            "data": data
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/hotel-names")
-async def get_all_hotel_names(db: AsyncSession = Depends(get_db)):
-    try:
-        result = await db.execute(
-            select(HotelsInfo.hotel_name)
-            .order_by(HotelsInfo.hotel_name)
-        )
-
-        hotel_names = result.scalars().all()
-
-        return {
-            "count": len(hotel_names),
-            "data": hotel_names
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/countries")
-async def get_all_countries(db: AsyncSession = Depends(get_db)):
-    try:
-        result = await db.execute(
-            select(HotelsInfo.country)
-            .distinct()
-            .order_by(HotelsInfo.country)
-        )
-
-        countries = result.scalars().all()
-
-        # remove None/null if exists
-        countries = [c for c in countries if c]
-
-        return {
-            "count": len(countries),
-            "data": countries
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
