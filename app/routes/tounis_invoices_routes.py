@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
-from models.tounis_hotel import TousisHotel
+from models.tounis_hotel import TounisHotel
 from core.database import get_db
 
 
@@ -16,7 +16,7 @@ async def get_all_invoices(
     session: AsyncSession = Depends(get_db)
 ):
     result = await session.execute(
-        select(TousisHotel)
+        select(TounisHotel)
     )
     records = result.scalars().all()
 
@@ -32,7 +32,7 @@ async def get_invoice_by_id(
     invoice_id: UUID,
     session: AsyncSession = Depends(get_db)
 ):
-    invoice = await session.get(TousisHotel, invoice_id)
+    invoice = await session.get(TounisHotel, invoice_id)
 
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -48,7 +48,7 @@ async def create_invoice(
     payload: dict,
     session: AsyncSession = Depends(get_db)
 ):
-    invoice = TousisHotel(data=payload)
+    invoice = TounisHotel(data=payload)
 
     session.add(invoice)
     await session.commit()
@@ -67,7 +67,7 @@ async def update_invoice(
     payload: dict,
     session: AsyncSession = Depends(get_db)
 ):
-    invoice = await session.get(TousisHotel, invoice_id)
+    invoice = await session.get(TounisHotel, invoice_id)
 
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -88,7 +88,7 @@ async def delete_invoice(
     invoice_id: UUID,
     session: AsyncSession = Depends(get_db)
 ):
-    invoice = await session.get(TousisHotel, invoice_id)
+    invoice = await session.get(TounisHotel, invoice_id)
 
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
