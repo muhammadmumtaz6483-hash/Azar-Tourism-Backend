@@ -11,6 +11,7 @@ from routes.novotel_routes import n_router
 from routes.auth import router as auth_router
 from routes.hotels_info_routes import router as hotels_info_router  
 from routes.turkey_invoices_routes import router as turkey_invoices_router 
+from routes.tounis_invoices_routes import router as tounis_invoices_router
 from routes.egypt_invoices_routes import router as egypt_invoices_router   
 from routes.malaysia_invoices_routes import router as malaysia_invoices_router 
 from routes.uk_invoices_routes import router as uk_invoices_router  
@@ -79,6 +80,7 @@ app.include_router(auth_router)
 app.include_router(n_router)
 app.include_router(hotels_info_router)
 app.include_router(turkey_invoices_router)
+app.include_router(tounis_invoices_router)  
 app.include_router(egypt_invoices_router)   
 app.include_router(malaysia_invoices_router)
 app.include_router(uk_invoices_router)
