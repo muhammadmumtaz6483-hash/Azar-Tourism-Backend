@@ -11,7 +11,7 @@ from routes.services.egypt_hotel_service import get_all_egypt_hotels ,get_all_eg
 from routes.services.malaysia_hotel_service import get_all_malaysia_hotels, get_all_malaysia_hotels_by_page
 from routes.services.uk_hotel_service import get_all_uk_hotels, get_all_uk_hotels_by_page
 from routes.services.tounis_hotel_service import get_all_tounis_hotels, get_all_tounis_hotels_by_page       
-# from routes.services.dubai_hotel_service import get_all_dubai_hotels, get_all_dubai_hotels_by_page
+from routes.services.dubai_hotel_service import get_all_dubai_hotels, get_all_dubai_hotels_by_page
 
 router = APIRouter(
     prefix="/api/dashboard",
@@ -26,7 +26,7 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
     malaysia_hotels_data = await get_all_malaysia_hotels(db)    
     uk_hotels_data = await get_all_uk_hotels(db)
     tounis_hotels_data = await get_all_tounis_hotels(db)        
-    # dubai_hotels_data = await get_all_dubai_hotels(db)
+    dubai_hotels_data = await get_all_dubai_hotels(db)
 
     return {
         "success": True,
@@ -38,7 +38,7 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
             "malaysia_hotels": malaysia_hotels_data,
             "uk_hotels": uk_hotels_data,
             "tounis_hotels": tounis_hotels_data,        
-            # "dubai_hotels": dubai_hotels_data
+            "dubai_hotels": dubai_hotels_data
         }
     }
 
