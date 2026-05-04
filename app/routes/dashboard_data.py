@@ -71,44 +71,51 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
 #     }
 
 
-# @router.get("/getbypagination", status_code=status.HTTP_200_OK)
-# async def dashboard_data(
-#     page: int = Query(1, ge=1),
-#     db: AsyncSession = Depends(get_db)
-# ):
-#     page_size = 10
-#     offset = (page - 1) * page_size
+@router.get("/getbypagination", status_code=status.HTTP_200_OK)
+async def dashboard_data(
+    page: int = Query(1, ge=1),
+    db: AsyncSession = Depends(get_db)
+):
+    page_size = 10
+    offset = (page - 1) * page_size
 
-#     # ✅ Get ALL data (no pagination here)
-#     invoices_data = await get_all_invoice_records(db)
-#     turkey_hotels_data = await get_all_turkey_hotels(db)
-#     egypt_hotels_data = await get_all_egypt_hotels(db)
-#     malaysia_hotels_data = await get_all_malaysia_hotels(db)
+    # ✅ Get ALL data (no pagination here)
+    invoices_data = await get_all_invoice_records(db)
+    turkey_hotels_data = await get_all_turkey_hotels(db)
+    egypt_hotels_data = await get_all_egypt_hotels(db)
+    malaysia_hotels_data = await get_all_malaysia_hotels(db)
+    uk_hotels_data = await get_all_uk_hotels(db)
+    tounis_hotels_data = await get_all_tounis_hotels(db)
+    dubai_hotels_data = await get_all_dubai_hotels(db)      
 
-#     # ✅ Extract records
-#     all_records = (
-#         invoices_data["records"] +
-#         turkey_hotels_data["records"] +
-#         egypt_hotels_data["records"] +
-#         malaysia_hotels_data["records"]
-#     )
 
-#     # ✅ Sort by latest (IMPORTANT)
-#     all_records.sort(key=lambda x: x.created_at, reverse=True)
+    # ✅ Extract records
+    all_records = (
+        invoices_data["records"] +
+        turkey_hotels_data["records"] +
+        egypt_hotels_data["records"] +
+        malaysia_hotels_data["records"]+
+        uk_hotels_data["records"]+
+        tounis_hotels_data["records"]+
+        dubai_hotels_data["records"]
+    )
 
-#     # ✅ Apply pagination AFTER merge
-#     paginated_data = all_records[offset: offset + page_size]
+    # ✅ Sort by latest (IMPORTANT)
+    all_records.sort(key=lambda x: x.created_at, reverse=True)
 
-#     return {
-#         "success": True,
-#         "message": "Dashboard data loaded successfully",
-#         "pagination": {
-#             "page": page,
-#             "page_size": page_size,
-#             "total": len(all_records)
-#         },
-#         "data": paginated_data
-#     }
+    # ✅ Apply pagination AFTER merge
+    paginated_data = all_records[offset: offset + page_size]
+
+    return {
+        "success": True,
+        "message": "Dashboard data loaded successfully",
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": len(all_records)
+        },
+        "data": paginated_data
+    }
 
 # ✅ Correct nested status path
 def status_expr(model):
