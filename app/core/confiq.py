@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-from urllib.parse import quote_plusuvicorn main:app --reload
 
 load_dotenv()
 
@@ -11,7 +10,7 @@ DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 
 DATABASE_URL = os.getenv("DATABASE_URL") or (
-    f"postgresql+asyncpg://{DB_USER}:{quote_plus(DB_PASS)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
 if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
